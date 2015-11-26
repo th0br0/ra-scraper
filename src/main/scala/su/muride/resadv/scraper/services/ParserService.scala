@@ -23,33 +23,37 @@ case class EventDate(text: String, date: LocalDate)
 
 case class Event(name: String, timestamp: String, lineup: List[Dj])
 
-case class EventCost(cost: Int, currency: Option[String])
+case class EventCost(cost: Option[Float], currency: Option[String])
 
-case class ClubLocation(id: Option[Int], name: String, address: String, countryId: Int)
+case class EventVenue(id: Option[Int], name: String, address: String, countryId: Int)
 
-class DjExtractor extends HtmlExtractor[Seq[Dj]] with NodeVisitor {
+case class Promoter(name: String, id: Option[Int])
+
+trait NameExtractor[T] extends HtmlExtractor[Seq[T]] with NodeVisitor {
+  val maxDepth: Int
 
   val current = ListBuffer[Node]()
-  var djs = ListBuffer[Dj]()
+  var objs = ListBuffer[T]()
   val regex = """([^,]+)""".r
 
   override def head(node: Node, depth: Int): Unit = {
     // TODO linebreak with meta after dj name...
 
     node match {
-      case e: Element if e.nodeName.equalsIgnoreCase("br")     => done()
-      case e: Element if e.nodeName.equalsIgnoreCase("a")      => current += e
-      case t: TextNode if !t.text().contains(",") && depth < 2 => current += t
-      case t: TextNode if depth < 2 => {
+      case e: Element if e.nodeName.equalsIgnoreCase("br")            => done()
+      case e: Element if e.nodeName.equalsIgnoreCase("a")             => current += e
+      case t: TextNode if !t.text().contains(",") && depth < maxDepth => current += t
+      case t: TextNode if depth < maxDepth => {
         var bracketCounter = 0
-        for (el <- regex.findAllIn(t.text) if el.trim.length > 0) {
-          current += new TextNode(el, "/")
+        for (el <- regex.findAllIn(t.text()) if el.trim.length > 0) {
           bracketCounter += el.count(_ == '(')
           bracketCounter -= el.count(_ == ')')
 
           if (bracketCounter == 0) {
+            current += new TextNode(el, "/")
             done()
-          }
+          } else current += new TextNode(el + ",", "/")
+
         }
       }
       case _ =>
@@ -58,9 +62,24 @@ class DjExtractor extends HtmlExtractor[Seq[Dj]] with NodeVisitor {
 
   override def tail(node: Node, depth: Int): Unit = {}
 
+  def done()
+
+  override def extract(p: Elements): Seq[T] = {
+    p.foreach(p => {
+      p.traverse(this);
+      done();
+    })
+
+    objs.toSeq
+  }
+}
+
+class DjExtractor extends NameExtractor[Dj] {
+  val maxDepth = 2
+
   def done() = {
     if (!current.isEmpty) {
-      djs += Dj(
+      objs += Dj(
         name = current.foldLeft("") {
           case (a: String, b: TextNode) => a + b.text()
           case (a: String, b: Element)  => a + b.text()
@@ -71,17 +90,28 @@ class DjExtractor extends HtmlExtractor[Seq[Dj]] with NodeVisitor {
     current.clear()
   }
 
-  override def extract(p: Elements): Seq[Dj] = {
-    p.foreach(p => {
-      p.traverse(this);
-      done();
-    })
-
-    djs.toSeq
-  }
 }
 
-class DateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
+class PromoterExtractor extends NameExtractor[Promoter] {
+  // FIXME not working fully
+  val maxDepth = 1
+
+  def done() = {
+    if (!current.isEmpty) {
+      objs += Promoter(
+        name = current.foldLeft("") {
+          case (a: String, b: TextNode) => a + b.text()
+          case (a: String, b: Element)  => a + b.text()
+        } trim,
+        id = current.filter(_.isInstanceOf[Element]).headOption.flatMap(n => n.attr("href").split("id=").lift(1)).map(_.toInt)
+      )
+    }
+    current.clear()
+  }
+
+}
+
+class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
   val current = StringBuilder.newBuilder
   var timestamp = new LocalDate()
 
@@ -111,7 +141,7 @@ class DateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
   }
 }
 
-class ClubLocationExtractor extends HtmlExtractor[ClubLocation] with NodeVisitor {
+class EventVenueExtractor extends HtmlExtractor[EventVenue] with NodeVisitor {
   val current = StringBuilder.newBuilder
   var localId: Int = -1
 
@@ -146,49 +176,62 @@ class ClubLocationExtractor extends HtmlExtractor[ClubLocation] with NodeVisitor
       }
     }
 
-    ClubLocation(
+    EventVenue(
       clubEl.flatMap(_.attr("href").split("id=").lift(1)).map(_.toInt),
-      clubName,
-      clubAddress,
+      clubName.trim.stripSuffix(",").stripSuffix(";"),
+      clubAddress.trim.stripSuffix(",").stripSuffix(";"),
       localId
     )
   }
 }
 
 trait ParserService {
-  private val currencyRegex = """[\p{Sc}\u0024\u060B][\d,.]+""".r
+  val Decimal = """(\d+)(\.\d*)?""".r
 
   def parseEventPage(pageContent: String): String = {
     val browser = new Browser
     val doc = browser.parseString(pageContent)
 
     val title: String = doc >> text("#sectionHead h1")
-    val lineup = (doc >> elementList(".lineup") >> new DjExtractor).flatten
+    val lineup = (doc >> elementList(".lineup") >> new DjExtractor).flatten.distinct
     val description = (doc >> element("div.left") >> elementList("p")).lift(1)
     val membersFavouriteCount = doc >> text("#MembersFavouriteCount")
 
     val aside = doc >> element("#detail") >> elementList("li")
-    val date = aside(0) >> new DateExtractor
-    val location = aside(1) >> new ClubLocationExtractor
-    val cost = aside.lift(2).map(_.text()) match {
-      case Some(s: String) if s.startsWith("Cost") => {
 
-        val costString = s.split("/")(1).trim
-        //println(currencyRegex.findAllIn(costString))
-        println(costString)
+    var date: EventDate = null
+    var cost: Option[EventCost] = None
+    var venue: EventVenue = null
+    var promoters: Seq[Promoter] = Seq.empty
 
-        "123"
+    aside.foreach(s => s.text() match {
+      case t: String if t.startsWith("Cost") => {
+        val costString = t.split("/")(1).trim
+        val price = Decimal.findAllIn(costString).find(_ => true)
+
+        val unit = Option(costString.filter(c => !(c.isDigit || c == ' ')).trim).filter(_.nonEmpty)
+
+        cost = Some(EventCost(price.map(_.toFloat), unit))
       }
-      case _ => ???
-    }
+      case t: String if t.startsWith("Date") => {
+        date = s >> new EventDateExtractor
+      }
+      case t: String if t.startsWith("Venue") => {
+        venue = s >> new EventVenueExtractor
+      }
+      case t: String if t.startsWith("Promoters") => {
+        promoters = s >> new PromoterExtractor
+      }
+    })
 
     println("Event title: " + title)
     println("Event lineup: " + lineup)
     println("Event description: " + description)
+    println("Event cost: " + cost)
     println("Event date: " + date)
-    println("Event location: " + location)
+    println("Event venue: " + venue)
+    println("Event promoters:" + promoters)
     println("Members favourite count: " + membersFavouriteCount)
-    println("aside: " + aside)
 
     title
 
