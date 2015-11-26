@@ -1,11 +1,12 @@
 package su.muride.resadv.scraper.services
 
+import java.time.LocalDate
+
 import com.google.common.base.Splitter
 import net.ruippeixotog.scalascraper.browser.Browser
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.scraper.HtmlExtractor
-import org.joda.time.LocalDate
 import org.jsoup.nodes.{ Element, Node, TextNode }
 import org.jsoup.select.{ Elements, NodeVisitor }
 
@@ -21,11 +22,14 @@ case class Dj(name: String, id: Option[String])
 
 case class EventDate(text: String, date: LocalDate)
 
-case class Event(name: String, timestamp: String, lineup: List[Dj])
+case class Event(name: String, description: Option[String], date: EventDate, cost: Option[EventCost], lineup: Seq[Dj],
+  promoters: Seq[Promoter], venue: EventVenue, owner: Profile)
 
 case class EventCost(cost: Option[Float], currency: Option[String])
 
 case class EventVenue(id: Option[Int], name: String, address: String, countryId: Int)
+
+case class Profile(name: String, id: String)
 
 case class Promoter(name: String, id: Option[Int])
 
@@ -113,7 +117,7 @@ class PromoterExtractor extends NameExtractor[Promoter] {
 
 class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
   val current = StringBuilder.newBuilder
-  var timestamp = new LocalDate()
+  var timestamp = LocalDate.now()
 
   override def head(node: Node, depth: Int): Unit = {
 
@@ -123,7 +127,7 @@ class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
         val pairs = Splitter.on('&').trimResults.withKeyValueSeparator("=").split(e.attr("href").split("\\?")(1))
 
         timestamp = pairs("v") match {
-          case "day" => new LocalDate(pairs("yr").toInt, pairs("mn").toInt, pairs("dy").toInt)
+          case "day" => LocalDate.of(pairs("yr").toInt, pairs("mn").toInt, pairs("dy").toInt)
           case _     => throw new RuntimeException("unhandled date type: " + e.attr("href"))
         }
       }
@@ -188,16 +192,20 @@ class EventVenueExtractor extends HtmlExtractor[EventVenue] with NodeVisitor {
 trait ParserService {
   val Decimal = """(\d+)(\.\d*)?""".r
 
-  def parseEventPage(pageContent: String): String = {
+  def parseEventPage(pageContent: String): Event = {
     val browser = new Browser
     val doc = browser.parseString(pageContent)
 
     val title: String = doc >> text("#sectionHead h1")
     val lineup = (doc >> elementList(".lineup") >> new DjExtractor).flatten.distinct
-    val description = (doc >> element("div.left") >> elementList("p")).lift(1)
+    val description = (doc >> element("div.left") >> elementList("p")).lift(1).map(_.html())
     val membersFavouriteCount = doc >> text("#MembersFavouriteCount")
 
     val aside = doc >> element("#detail") >> elementList("li")
+
+    val profile = Profile(
+      doc >> text(".links a:first-child"),
+      (doc >> attr("href")(".links a:first-child")).replace("/profile/", ""))
 
     var date: EventDate = null
     var cost: Option[EventCost] = None
@@ -224,17 +232,9 @@ trait ParserService {
       }
     })
 
-    println("Event title: " + title)
-    println("Event lineup: " + lineup)
-    println("Event description: " + description)
-    println("Event cost: " + cost)
-    println("Event date: " + date)
-    println("Event venue: " + venue)
-    println("Event promoters:" + promoters)
-    println("Members favourite count: " + membersFavouriteCount)
+    val event = Event(title, description, date, cost, lineup, promoters, venue, profile)
 
-    title
-
+    event
   }
 
 }
