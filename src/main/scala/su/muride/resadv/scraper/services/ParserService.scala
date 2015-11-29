@@ -16,13 +16,12 @@ import scala.language.postfixOps
 /**
  * @author Andreas C. Osowski
  */
-object ParserService extends ParserService
 
 case class Dj(name: String, id: Option[String])
 
 case class EventDate(text: String, date: LocalDate)
 
-case class Event(name: String, description: Option[String], date: EventDate, cost: Option[EventCost], lineup: Seq[Dj],
+case class Event(id: Int, name: String, description: Option[String], date: EventDate, cost: Option[EventCost], lineup: Seq[Dj],
   promoters: Seq[Promoter], venue: EventVenue, owner: Profile)
 
 case class EventCost(cost: Option[Float], currency: Option[String])
@@ -38,7 +37,6 @@ trait NameExtractor[T] extends HtmlExtractor[Seq[T]] with NodeVisitor {
 
   val current = ListBuffer[Node]()
   var objs = ListBuffer[T]()
-  val regex = """([^,]+)""".r
 
   override def head(node: Node, depth: Int): Unit = {
     // TODO linebreak with meta after dj name...
@@ -48,16 +46,21 @@ trait NameExtractor[T] extends HtmlExtractor[Seq[T]] with NodeVisitor {
       case e: Element if e.nodeName.equalsIgnoreCase("a")             => current += e
       case t: TextNode if !t.text().contains(",") && depth < maxDepth => current += t
       case t: TextNode if depth < maxDepth => {
+        val els = t.text().split(",").toSeq
         var bracketCounter = 0
-        for (el <- regex.findAllIn(t.text()) if el.trim.length > 0) {
-          bracketCounter += el.count(_ == '(')
-          bracketCounter -= el.count(_ == ')')
+        for (el <- els) {
+          if (el.trim.length == 0) done()
+          else {
+            bracketCounter += el.count(_ == '(')
+            bracketCounter -= el.count(_ == ')')
 
-          if (bracketCounter == 0) {
-            current += new TextNode(el, "/")
-            done()
-          } else current += new TextNode(el + ",", "/")
-
+            if (bracketCounter == 0) {
+              current += new TextNode(el, "/")
+              done()
+            } else {
+              current += new TextNode(el + ",", "/")
+            }
+          }
         }
       }
       case _ =>
@@ -97,8 +100,7 @@ class DjExtractor extends NameExtractor[Dj] {
 }
 
 class PromoterExtractor extends NameExtractor[Promoter] {
-  // FIXME not working fully
-  val maxDepth = 1
+  val maxDepth = 2
 
   def done() = {
     if (!current.isEmpty) {
@@ -112,7 +114,6 @@ class PromoterExtractor extends NameExtractor[Promoter] {
     }
     current.clear()
   }
-
 }
 
 class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
@@ -122,7 +123,6 @@ class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
   override def head(node: Node, depth: Int): Unit = {
 
     node match {
-
       case e: Element if e.nodeName.equalsIgnoreCase("a") => {
         val pairs = Splitter.on('&').trimResults.withKeyValueSeparator("=").split(e.attr("href").split("\\?")(1))
 
@@ -196,6 +196,8 @@ trait ParserService {
     val browser = new Browser
     val doc = browser.parseString(pageContent)
 
+    val id = (doc >> attr("content")("""meta[Property="og:url"]""")).split("\\?")(1).toInt
+
     val title: String = doc >> text("#sectionHead h1")
     val lineup = (doc >> elementList(".lineup") >> new DjExtractor).flatten.distinct
     val description = (doc >> element("div.left") >> elementList("p")).lift(1).map(_.html())
@@ -232,9 +234,11 @@ trait ParserService {
       }
     })
 
-    val event = Event(title, description, date, cost, lineup, promoters, venue, profile)
+    val event = Event(id, title, description, date, cost, lineup, promoters, venue, profile)
 
     event
   }
 
 }
+
+object ParserService extends ParserService

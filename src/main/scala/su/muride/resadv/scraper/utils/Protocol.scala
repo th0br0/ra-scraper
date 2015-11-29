@@ -32,6 +32,6 @@ trait Protocol extends DefaultJsonProtocol {
   implicit val eventCostFormat = jsonFormat2(EventCost)
   implicit val profileFormat = jsonFormat2(Profile)
   implicit val promoterFormat = jsonFormat2(Promoter)
-  implicit val eventFormat = jsonFormat8(Event)
+  implicit val eventFormat = jsonFormat9(Event)
 
 }
