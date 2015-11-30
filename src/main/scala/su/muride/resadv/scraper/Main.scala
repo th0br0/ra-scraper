@@ -5,6 +5,7 @@ import akka.event.{ Logging, LoggingAdapter }
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import su.muride.resadv.scraper.http.HttpService
+import su.muride.resadv.scraper.models.db._
 import su.muride.resadv.scraper.utils.{ Config, Migration }
 
 import scala.concurrent.ExecutionContext

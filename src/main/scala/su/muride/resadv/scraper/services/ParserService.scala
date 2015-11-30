@@ -1,12 +1,11 @@
 package su.muride.resadv.scraper.services
 
-import java.time.LocalDate
-
 import com.google.common.base.Splitter
 import net.ruippeixotog.scalascraper.browser.Browser
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.scraper.HtmlExtractor
+import org.joda.time.LocalDate
 import org.jsoup.nodes.{ Element, Node, TextNode }
 import org.jsoup.select.{ Elements, NodeVisitor }
 
@@ -127,7 +126,7 @@ class EventDateExtractor extends HtmlExtractor[EventDate] with NodeVisitor {
         val pairs = Splitter.on('&').trimResults.withKeyValueSeparator("=").split(e.attr("href").split("\\?")(1))
 
         timestamp = pairs("v") match {
-          case "day" => LocalDate.of(pairs("yr").toInt, pairs("mn").toInt, pairs("dy").toInt)
+          case "day" => new LocalDate(pairs("yr").toInt, pairs("mn").toInt, pairs("dy").toInt)
           case _     => throw new RuntimeException("unhandled date type: " + e.attr("href"))
         }
       }

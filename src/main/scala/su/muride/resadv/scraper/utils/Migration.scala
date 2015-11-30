@@ -9,11 +9,9 @@ trait Migration extends Config {
 
   private val flyway = new Flyway()
   flyway.setDataSource(databaseUrl, databaseUser, databasePassword)
+  flyway.setBaselineOnMigrate(true)
 
   def migrate() = {
-    if (flyway.getBaselineVersion() == MigrationVersion.EMPTY)
-      flyway.baseline()
-
     flyway.migrate()
   }
 
