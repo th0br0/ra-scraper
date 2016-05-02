@@ -13,5 +13,6 @@ case class EventEntity(
   dateDesc: String,
   price: Option[Float],
   priceDesc: Option[String],
+  attendeeCount: Int,
   venueId: Option[Int],
   ownerId: String)

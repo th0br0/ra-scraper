@@ -21,7 +21,7 @@ case class Dj(name: String, id: Option[String])
 case class EventDate(text: String, date: LocalDate)
 
 case class Event(id: Int, name: String, description: Option[String], date: EventDate, cost: Option[EventCost], lineup: Seq[Dj],
-  promoters: Seq[Promoter], venue: EventVenue, owner: Profile)
+  promoters: Seq[Promoter], attendeeCount: Int, venue: EventVenue, owner: Profile)
 
 case class EventCost(cost: Option[Float], currency: Option[String])
 
@@ -233,7 +233,7 @@ trait ParserService {
       }
     })
 
-    val event = Event(id, title, description, date, cost, lineup, promoters, venue, profile)
+    val event = Event(id, title, description, date, cost, lineup, promoters, membersFavouriteCount.toInt, venue, profile)
 
     event
   }

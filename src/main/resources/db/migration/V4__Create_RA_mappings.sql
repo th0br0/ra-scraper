@@ -23,6 +23,7 @@ CREATE TABLE "events" (
   "date_desc"   VARCHAR NOT NULL,
   "price"       REAL,
   "price_desc"  VARCHAR,
+  "attendee_count" INTEGER,
   "venue_id"    INTEGER,
   "owner_id"    VARCHAR NOT NULL
 );

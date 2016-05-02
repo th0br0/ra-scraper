@@ -23,6 +23,8 @@ trait EventEntityTable extends DatabaseConfig with VenueEntityTable with Profile
 
     def priceDesc = column[Option[String]]("price_desc")
 
+    def attendeeCount = column[Int]("attendee_count")
+
     def venueId = column[Option[Int]]("venue_id")
 
     def ownerId = column[String]("owner_id")
@@ -33,7 +35,7 @@ trait EventEntityTable extends DatabaseConfig with VenueEntityTable with Profile
 
     def venueFk = foreignKey("VENUE_FK", venueId, venues)(_.id.?, onUpdate = ForeignKeyAction.Restrict, onDelete = ForeignKeyAction.NoAction)
 
-    def * = (id, name, description, date, dateDesc, price, priceDesc, venueId, ownerId) <> ((EventEntity.apply _).tupled, EventEntity.unapply)
+    def * = (id, name, description, date, dateDesc, price, priceDesc, attendeeCount, venueId, ownerId) <> ((EventEntity.apply _).tupled, EventEntity.unapply)
   }
 
   protected val events = TableQuery[Events]

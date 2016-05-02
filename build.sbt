@@ -3,17 +3,19 @@ import scalariform.formatter.preferences._
 name          := "ra-scraper"
 organization  := "su.muride"
 version       := "0.0.1"
-scalaVersion  := "2.11.7"
+scalaVersion  := "2.11.8"
 scalacOptions := Seq("-unchecked", "-feature", "-deprecation", "-encoding", "utf8")
+
+fork := true
 
 libraryDependencies ++= {
   val scalazV          = "7.1.5"
-  val akkaStreamV      = "2.0-M1"
+  val akkaStreamV      = "2.0.4"
   val scalaTestV       = "3.0.0-M10"
   val scalaMockV       = "3.2.2"
   val scalazScalaTestV = "0.3.0"
-  val slickV           = "3.1.0"
-  val flywayV = "3.2.1"
+  val slickV           = "3.1.1"
+  val flywayV = "4.0"
   val h2V = "1.4.190"
 
   Seq(
